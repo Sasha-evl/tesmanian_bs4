@@ -1,80 +1,74 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-
 from time import sleep
+import os
+from dotenv import load_dotenv
 
-# Telegram token to access the HTTP API:
-TEL_TOKEN = '5345879008:AAFwcrd_0a1kmVoFDfqmTp-KdR9JzXW0SGo'
-
-# All queries to the Telegram Bot API need to be presented
-# in this form: https://api.telegram.org/bot<token>/METHOD_NAME.
-TEL_URL = 'https://api.telegram.org/bot{token}/sendMessage'
-URL = 'https://www.tesmanian.com/blogs/tesmanian-blog'
-
-# def login():
-# after login attempt redirect to
-# https://www.tesmanian.com/challenge - captcha confirmation page
-#     headers = {
-#         'user-agent': 'Mozilla/5.0(Windows NT 10.0; Win64; x64) AppleWebKit/537.36(KHTML, likeGecko)
-#         Chrome/104.0.0.0 Safari/537.36'
-#     }
-#     login_data = {
-#         'form_type': 'customer_login',
-#         'customer[email]': 'alexandr.yevlentyev@gmail.com',
-#         'customer[password]': '123456789',
-#         'return_url': '/account',
-#         'recaptcha-v3-token': ''
-#     }
-#
-#     with requests.Session() as s:
-#         log_url = 'https://www.tesmanian.com/account'
-#         r = s.get(log_url, headers=headers)
-#         soup = BeautifulSoup(r.content, 'html.parser')
-#         r = s.post(log_url, data=login_data, headers=headers)
-#         print(r.url)
+load_dotenv()
 
 
 def check_post():
+    # Get last post url
+    post_title, absolute_post_url = '', ''
+    URL = os.getenv('URL')
     query = requests.get(URL)
     soup = BeautifulSoup(query.text, 'html.parser')
     post_url = soup.find('div', class_='container main content').find('h2').find('a').get('href')
 
+    # Open a .csv file that stores the last post url
     with open('post.csv', 'r') as file:
         data = csv.DictReader(file)
         prev_post_url = next(data).get('post_url')
 
+    # Compare link from a .csv file with the link received from the site
+    # If the links don't match then prepare a message for telegram
     if prev_post_url != post_url:
         post_title = soup.find('div', class_='container main content').find('h2').find('a').text
         absolute_post_url = 'https://www.tesmanian.com/' + post_url
         data = {'post_url': post_url}
 
-        # overwrite link of the last post for next comparison
+        # Overwrite link of the last post for next compare
         with open('post.csv', 'w', newline='') as file:
             writer = csv.DictWriter(file, fieldnames=data.keys())
             writer.writeheader()
             writer.writerow(data)
 
-        return tel_send_message(post_title, absolute_post_url)
+    # Return Post title and link to it as a result of function
+    return post_title, absolute_post_url
+
 
 
 def tel_send_message(post_title, post_link):
+    # Telegram token to access the HTTP API:
+    TEL_TOKEN = os.getenv('TEL_TOKEN')
+
+    # All queries to the Telegram Bot API need to be presented
+    # in this form: https://api.telegram.org/bot<token>/METHOD_NAME.
+    tel_url = 'https://api.telegram.org/bot{token}/sendMessage'
+    CHAT_ID = os.getenv('URL')
+
     # Use sendMessage Telegram method with 2 required parameters: chat_id, text
     # to send a message for a new post
     params = {
-        'chat_id': '522243417',
+        'chat_id': CHAT_ID,
         'text': f'{post_title}\n {post_link}'
     }
-    query_url = TEL_URL.format(token=TEL_TOKEN)
+    query_url = tel_url.format(token=TEL_TOKEN)
     query = requests.get(url=query_url, params=params)
     return query
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
+def main():
     while True:
-        check_post()
+        post_title, post_url = check_post()
+        if post_title and post_url:
+            status = tel_send_message(post_title, post_url)
         sleep(15)
+
+
+if __name__ == '__main__':
+    main()
 
 
 
